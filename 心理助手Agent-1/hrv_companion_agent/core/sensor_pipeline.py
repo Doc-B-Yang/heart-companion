@@ -150,7 +150,12 @@ class SensorPipeline:
         rate, expected = packet.get('sample_rate'), packet.get('expected_rate')
         if not finite(rate) or not finite(expected) or expected <= 0 or abs(rate / expected - 1) > 0.10:
             reasons.append('采样速率异常或未知')
-        self.channel_diagnostics['ppg'] = {'packet_ok': not reasons, 'reasons': list(reasons)}
+        self.channel_diagnostics['ppg'] = {
+            'packet_ok': not reasons, 'reasons': list(reasons),
+            'sig_quality': q if finite(q) else None,
+            'pi_pct': pi if finite(pi) else None,
+            'sample_rate_hz': rate if finite(rate) else None,
+        }
         if reasons:
             self.clear(now)
             return self._result(True, reasons, {}, False)

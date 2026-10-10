@@ -17,7 +17,10 @@ function showState(state){
   $('channelDiagnostics').textContent=state?.layer==='stale'?'数据已过期，等待新数据。':
     ['ppg','gsr','imu'].filter(key=>channels[key]).map(key=>{
       const c=channels[key],name={ppg:'PPG',gsr:'GSR',imu:'运动'}[key];
-      return name+'：'+(c.packet_ok?'当前包检查通过':(c.reasons||[]).join('、'));
+      let numbers='';
+      if(key==='ppg') numbers=[Number.isFinite(c.sig_quality)?`质量 ${c.sig_quality.toFixed(3)}`:'',Number.isFinite(c.pi_pct)?`PI ${c.pi_pct.toFixed(3)}%`:''].filter(Boolean).join('，');
+      if(key==='gsr'&&Number.isFinite(c.min_v)&&Number.isFinite(c.max_v)) numbers=`${c.min_v.toFixed(4)}–${c.max_v.toFixed(4)} V`;
+      return name+'：'+(c.packet_ok?'当前包检查通过':(c.reasons||[]).join('、'))+(numbers?`（${numbers}）`:'');
     }).join('；')||'各传感器诊断等待数据。';
   $('ppgState').textContent=q.ppg_ok?'窗口合格':'积累 / 待检查';
   $('edaState').textContent=q.eda_ok?'窗口合格':'积累 / 待检查';
