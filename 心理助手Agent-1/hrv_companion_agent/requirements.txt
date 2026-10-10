@@ -1,0 +1,5 @@
+# 核心依赖（离线演示模式仅需 python-dotenv）
+# Python >= 3.9
+hello-agents>=0.1.0      # 项目指定 Agent 框架（Datawhale HelloAgents，章节7架构）
+openai>=1.40             # OpenAI 兼容 LLM 客户端（DeepSeek/通义千问/Kimi/Ollama）
+python-dotenv>=1.0       # .env 环境变量加载

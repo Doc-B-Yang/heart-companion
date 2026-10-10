@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>心绪 · 情感陪伴</title><link rel="stylesheet" href="./static/style.css"><link rel="stylesheet" href="./static/refinements.css"></head>
+<body><main>
+<header><a class="brand" href="./">心绪 <span>HEART COMPANION</span></a><nav><a href="#waveSection">实时波形</a><a href="#chatForm">心绪陪伴</a></nav><span id="serverStatus" class="badge">连接后端中</span></header>
+<section class="hero"><h1>心绪实验室</h1></section>
+<section class="card waves" id="waveSection">
+<div class="section-title"><h2>实时波形</h2><span class="badge" id="waveStatus" role="status">等待真实采集</span></div>
+<div class="wave-grid"><article><h3>PPG · 红外去直流 <small>ADC 计数 / 最近 8 秒</small></h3><canvas id="ppgWave" aria-label="PPG 红外波形"></canvas></article><article><h3>GSR · 皮肤电 <small>电压 V / 最近 30 秒</small></h3><canvas id="gsrWave" aria-label="GSR 电压波形"></canvas></article></div>
+<div class="wave-meta"><span id="waveCount">尚无采样</span><span id="waveMotion">运动状态等待数据</span><button class="secondary" id="pauseWave">暂停画面</button><button class="secondary" id="downloadWave" disabled>下载原始 CSV</button></div>
+<details class="connection-panel"><summary>连接电脑端服务</summary><p class="hint">网站随时可打开。实时波形需要这台电脑运行波形服务；分析和陪伴需要运行后端。浏览器询问本地网络访问时，请自行决定是否允许。</p><label class="field">分析后端 <input id="apiBase" placeholder="http://127.0.0.1:8000" type="url"></label><label class="field">波形服务 <input id="waveBase" value="http://127.0.0.1:8011" type="url"></label><button id="saveConnection" class="secondary">保存并连接</button><p class="hint" id="connectionHint" role="status">仅在此浏览器保存地址；不向 GitHub 上传信号或聊天。</p></details>
+</section>
+<div class="layout"><section class="card sensing">
+<div class="section-title"><h2>当下状态</h2><span id="connectionStatus" class="badge">未连接设备</span></div>
+<div class="state"><span id="emotion">等待数据</span><p id="emotionReason">连接传感器后，先积累稳定的数据。</p></div>
+<div class="quality"><span class="dot" id="qualityDot"></span><strong id="quality">信号尚未就绪</strong></div>
+<p id="qualityReason" class="muted">只有通过质量检查的数据才会参与分类。</p>
+<p id="channelDiagnostics" class="muted">各传感器诊断等待数据。</p>
+<div class="actions"><button id="connectBle">连接蓝牙设备</button><button id="disconnectBle" class="secondary" disabled>断开</button></div>
+<p class="hint">Chrome / Edge 可直接连接 BLE。USB 连接或其他浏览器请运行电脑网关。</p>
+<label class="field">参与者编号 <input id="userId" value="user001" maxlength="64" autocomplete="off"></label>
+<div class="label-panel"><h3>准备本次测量</h3><p class="muted">佩戴好电极后确认，保持静息约3分钟。确认自己处于平静状态，再保存静息基线。重新佩戴时请重新确认。</p><div class="actions"><button id="confirmContact" class="secondary">已佩戴好电极</button><button id="captureBaseline" class="secondary" disabled>我现在平静，保存基线</button></div><p id="calibrationStatus" class="hint" role="status">等待连接传感器。</p></div>
+<details><summary>查看采集状态</summary><dl class="metrics"><div><dt>PPG</dt><dd id="ppgState">—</dd></div><div><dt>皮肤电</dt><dd id="edaState">—</dd></div><div><dt>连续心搏</dt><dd id="beatCount">—</dd></div><div><dt>模型</dt><dd id="modelState">待校准</dd></div></dl><p class="hint">皮肤电当前以电压特征记录，尚未标定为电导；身体信号不能独立确认愉悦、焦虑等主观感受。</p></details>
+<div class="label-panel"><h3>记下你的感受</h3><p class="muted">以你自己的感受为准。有效硬件窗口可保存为独立训练标签。</p>
+<p class="hint">回想刚过去的60秒，分别评分。唤醒度指激活、兴奋程度；平静与愉悦可以同时存在。</p>
+<label class="field">唤醒度 <select id="arousalScore"><option value="">暂不评分</option><option value="1">1 非常平静</option><option>2</option><option>3</option><option>4</option><option value="5">5 中间状态</option><option>6</option><option>7</option><option>8</option><option value="9">9 非常激动</option></select></label>
+<label class="field">愉悦度 <select id="valenceScore"><option value="">暂不评分</option><option value="1">1 非常不愉快</option><option>2</option><option>3</option><option>4</option><option value="5">5 中性</option><option>6</option><option>7</option><option>8</option><option value="9">9 非常愉快</option></select></label>
+<div class="label-row"><select id="selfLabel" aria-label="当前感受"><option>平静</option><option>愉悦</option><option>低焦虑</option><option>高焦虑</option><option>疲劳</option></select><button id="saveLabel" class="secondary" disabled>保存自评</button></div><p id="labelStatus" role="status" class="hint">信号合格后可保存，相邻标签窗口不重叠。</p></div>
+</section><section class="card conversation"><div class="section-title"><h2>聊一聊</h2><span class="muted">你的表达优先</span></div>
+<div id="messages" class="messages" aria-live="polite"><div class="bubble assistant">今天有什么想说的吗？不用急着给自己的感受下定义。</div></div>
+<form id="chatForm"><label class="sr-only" for="message">你的消息</label><textarea id="message" rows="2" placeholder="把此刻的想法写下来…" maxlength="5000" required></textarea><button id="sendMessage" type="submit">发送</button></form><p id="chatStatus" role="status" class="hint">没有可靠生理结果时，陪伴仍以你的自述为依据。</p>
+</section></div><footer>本项目为研究原型。情绪估计会保留不确定性，不作医学诊断。<span>PPG · GSR · 自评实验</span></footer>
+</main><script type="module" src="./static/app.js"></script></body></html>

@@ -1,0 +1,11 @@
+# Current sensor API, multichannel training, USB/BLE gateway and deployment.
+python-dotenv>=1.0
+numpy>=1.26
+scikit-learn>=1.3
+joblib>=1.3
+fastapi>=0.110
+uvicorn>=0.29
+httpx>=0.27
+pyserial>=3.5
+bleak>=0.22
+mpremote>=1.24

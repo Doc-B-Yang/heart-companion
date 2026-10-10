@@ -1,0 +1,47 @@
+# Private configuration and personal experimental records
+**/mad_toolkit/results/
+硬件开发/esp32_firmware/连接排查记录-2026-10-01.md
+硬件开发/当前硬件与情绪分类改造说明-2026-10-04.md
+硬件开发/实验采集与波形质量说明.md
+.env
+.env.*
+!.env.example
+**/data/
+**/diagnostics/
+**/logs/
+*.log
+*.db
+*.sqlite*
+*.csv
+*.jsonl
+*.joblib
+*.pkl
+*.mp3
+*.wav
+# Environments, caches, backups and generated output
+**/.runtime/
+**/.venv/
+**/__pycache__/
+*.pyc
+**/.idea/
+**/_archive/
+**/*backup*/
+**/code-review*/
+tmp/
+site-build/
+*.zip
+*.bin
+*.pdf
+*.docx
+*.pptx
+# Third-party teaching materials and unrelated legacy copies
+项目开发计划书.md
+硬件开发/代码说明书.txt
+hello-agents-main/
+文献/
+开题答辩/
+心理助手Agent-0.py
+**/wf_sample_*.txt
+**/docs/research/*.txt
+**/docs/research/*.json
+**/docs/research/*.png
