@@ -30,7 +30,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
-from ..core.label_store import LabelStore
+from ..core.label_store import LabelStore, SelfReportStore
 
 from hrv_companion_agent import config
 from hrv_companion_agent.core.system import HeartCompanionSystem
@@ -43,6 +43,7 @@ router = APIRouter()
 _systems: Dict[str, HeartCompanionSystem] = {}
 _lock = threading.Lock()
 _labels = LabelStore()
+_experiment_reports = SelfReportStore()
 
 
 class RawSensorData(BaseModel):
@@ -53,7 +54,7 @@ class RawSensorData(BaseModel):
 class LabelRequest(BaseModel):
     user_id: str = Field(default='user001', min_length=1, max_length=64)
     label: str
-    note: str = ''
+    note: str = Field(default='', max_length=1000)
     arousal_score: Optional[int] = Field(default=None, ge=1, le=9, strict=True)
     valence_score: Optional[int] = Field(default=None, ge=1, le=9, strict=True)
 
@@ -96,6 +97,22 @@ def dataset_label(data: LabelRequest):
                               data.arousal_score, data.valence_score)
     except ValueError as exc:
         raise HTTPException(status_code=409,detail=str(exc)) from exc
+
+
+@router.post('/dataset/self-report')
+def experiment_self_report(data: LabelRequest):
+    try:
+        _experiment_reports.record(data.user_id, data.label, data.note,
+                                   data.arousal_score, data.valence_score)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        linked = _labels.append(get_system(data.user_id), data.label, data.note,
+                                data.arousal_score, data.valence_score)
+    except ValueError as exc:
+        return {'saved': True, 'label': data.label, 'training_sample_saved': False,
+                'training_reason': str(exc), 'next_label_after_sec': 0}
+    return {**linked, 'training_sample_saved': True}
 
 
 def get_system(user_id: str) -> HeartCompanionSystem:
@@ -482,7 +499,8 @@ def memory_pending(user_id: str, limit: int = 3):
 def memory_export(user_id: str):
     """导出用户全部数据（v2：文献5 的数据可携带权）"""
     system = get_system(user_id)
-    return {**system.export_data(), 'multimodal_labels': _labels.export(user_id)}
+    return {**system.export_data(), 'multimodal_labels': _labels.export(user_id),
+            'experiment_self_reports': _experiment_reports.export(user_id)}
 
 
 @router.post("/memory/purge")
@@ -494,6 +512,7 @@ def memory_purge(req: PurgeRequest):
     system = get_system(req.user_id)
     result = system.purge_data(keep_profile=req.keep_profile)
     result['multimodal_labels_removed'] = _labels.purge(req.user_id)
+    result['experiment_self_reports_removed'] = _experiment_reports.purge(req.user_id)
     return result
 
 

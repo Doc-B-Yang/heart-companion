@@ -10,6 +10,9 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 ROOT = Path(__file__).resolve().parent
 FOLDER = ROOT / 'diagnostics' / 'experiment-waveforms'
 FOLDER.mkdir(exist_ok=True)
@@ -52,7 +55,8 @@ def capture():
     with CSV_PATH.open('x', newline='', encoding='utf-8-sig') as output, LOG_PATH.open('x', encoding='utf-8') as log:
         writer = csv.writer(output)
         writer.writerow(['channel', 'segment_or_device_ms', 'device_ms_or_code_or_accel_g', 'red_or_voltage_V_or_gyro_dps', 'ir_or_tilt_deg', 'motion_blocked'])
-        proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
+        env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'}
+        proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', env=env)
         evidence = None
         position = 0
         pending = ''

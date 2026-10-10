@@ -35,20 +35,24 @@ function draw(id,points,seconds,gap){
   x.strokeStyle=id==='gsrWave'?'#bd815a':'#347960';x.lineWidth=1.6;x.beginPath();let previous=null;
   for(const p of points){if(!previous||p[0]<=previous[0]||p[0]-previous[0]>gap||p[2]!==previous[2])x.moveTo(X(p[0]),Y(p[1]));else x.lineTo(X(p[0]),Y(p[1]));previous=p;}x.stroke();
 }
+function usbFresh(){return !!latest?.updated&&!latest.finished&&Date.now()/1000-latest.updated<3;}
 function render(){
   if(ble.fresh()){
+    if(usbFresh())draw('ppgWave',ppgAC(latest.ppg||[]),8,35);
+    else{
     draw('ppgWave',[],8,35);
     const c=$('ppgWave'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);x.fillStyle='#70857c';x.font='13px system-ui';
     x.fillText('BLE 已收到 PPG 指标；当前固件不发送原始 PPG 波形。',20,70);
     x.fillText('原始 PPG 曲线请使用 USB 波形采集。',20,100);
+    }
     draw('gsrWave',ble.eda.map(p=>[p[0],p[1],0]),30,150);
   }else{draw('ppgWave',ppgAC(latest?.ppg||[]),8,35);draw('gsrWave',(latest?.eda||[]).filter(p=>p.length>=3&&p.slice(0,3).every(Number.isFinite)).map(p=>[p[0],p[2],0]),30,150);}
 }
 function updateDisplay(){
   if(ble.fresh()){
     const p=ble.packet,format=v=>Number.isFinite(v)?v.toFixed(3):'未知';
-    $('waveStatus').textContent='BLE 真实数据接收中 · GSR 实时波形';
-    $('waveCount').textContent=`已接收 ${ble.count} 包 · 最新序号 ${p.seq} · GSR 显示 ${ble.eda.length} 点`;
+    $('waveStatus').textContent=usbFresh()?'USB PPG + BLE GSR 实时波形':'BLE 真实数据接收中 · GSR 实时波形';
+    $('waveCount').textContent=(usbFresh()?`USB PPG ${latest.count} 点 · `:'')+`已接收 ${ble.count} 包 · 最新序号 ${p.seq} · GSR 显示 ${ble.eda.length} 点`;
     $('waveMotion').textContent=`PPG 质量 ${format(p.sig_quality)} · PI ${format(p.pi)}% · ${p.moving===false?'静止':p.moving===true?'运动':'运动状态未知'}`;
     $('downloadWave').textContent='下载 BLE 接收数据';$('downloadWave').disabled=false;
   }else{

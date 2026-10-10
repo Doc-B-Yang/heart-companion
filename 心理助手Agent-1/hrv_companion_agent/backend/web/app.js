@@ -3,6 +3,7 @@ import {connectionBase, startWaves, ingestBlePacket, resetBleSignals} from './wa
 const SERVICE='8e7c0001-7f8a-4a2c-9f81-4b9e764d0001',DATA='8e7c0002-7f8a-4a2c-9f81-4b9e764d0001';
 const $=id=>document.getElementById(id);
 let device=null,characteristic=null,lastPacket=0,lastState=null,queue=[],posting=false,assembler=new FrameAssembler(),labelUntil=0;
+let labelSaving=false;
 const uid=()=>$('userId').value.trim()||'user001';
 async function api(path,data){const r=await fetch(connectionBase()+'/api/'+path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(8000)});const body=await r.json();if(!r.ok)throw Error(body.detail||'请求失败');return body;}
 function showState(state){
@@ -30,7 +31,7 @@ function showState(state){
   $('confirmContact').disabled=state?.simulation!==false||state?.layer==='stale';
   $('captureBaseline').disabled=!q.quality_ok||!c.contact_ready||c.baseline_ready;
   $('calibrationStatus').textContent=c.baseline_ready?'本次静息基线已保存。':!c.contact_confirmed?'请确认电极已佩戴。':c.settle_remaining_sec>0?`电极稳定等待中，还需约${Math.ceil(c.settle_remaining_sec)}秒。`:'继续保持静息，信号稳定后可保存基线。';
-  $('saveLabel').disabled=!q.quality_ok||!c.baseline_ready||state?.simulation!==false||Date.now()<labelUntil;
+  $('saveLabel').disabled=labelSaving;
 }
 async function calibration(action){const user=uid();try{await api('sensor/calibration',{user_id:user,action});if(uid()===user){labelUntil=0;await poll(false);}}catch(e){$('calibrationStatus').textContent=e.message;}}
 $('confirmContact').onclick=()=>calibration('confirm_contact');
@@ -41,7 +42,7 @@ function disconnected(){queue=[];lastPacket=0;assembler.reset();$('connectBle').
 $('connectBle').onclick=async()=>{if(!navigator.bluetooth){$('connectionStatus').textContent='请使用 Chrome/Edge 或电脑网关';return;}try{$('connectBle').disabled=true;device=await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE]}],optionalServices:[SERVICE]});device.addEventListener('gattserverdisconnected',disconnected);const server=await device.gatt.connect();const service=await server.getPrimaryService(SERVICE);characteristic=await service.getCharacteristic(DATA);await characteristic.startNotifications();characteristic.addEventListener('characteristicvaluechanged',notification);$('disconnectBle').disabled=false;$('connectionStatus').textContent='蓝牙已连接，等待数据';}catch(e){disconnected();$('connectionStatus').textContent=e.name==='NotFoundError'?'未选择设备':e.message;}};
 $('disconnectBle').onclick=()=>{if(device?.gatt.connected)device.gatt.disconnect();disconnected();};
 $('userId').onchange=()=>{queue=[];lastState=null;labelUntil=0;resetBleSignals();showState(null);};
-$('saveLabel').onclick=async()=>{try{$('saveLabel').disabled=true;const rating=id=>$(id).value===''?null:Number($(id).value);const r=await api('dataset/label',{user_id:uid(),label:$('selfLabel').value,arousal_score:rating('arousalScore'),valence_score:rating('valenceScore')});labelUntil=Date.now()+r.next_label_after_sec*1000;$('arousalScore').value='';$('valenceScore').value='';$('labelStatus').textContent=`已保存「${r.label}」及本次自评，请继续稳定采集60秒后重新评分。`;}catch(e){$('labelStatus').textContent=e.message;showState(lastState);}};
+$('saveLabel').onclick=async()=>{if(labelSaving)return;labelSaving=true;$('saveLabel').disabled=true;try{const rating=id=>$(id).value===''?null:Number($(id).value);const r=await api('dataset/self-report',{user_id:uid(),label:$('selfLabel').value,note:$('selfNote').value,arousal_score:rating('arousalScore'),valence_score:rating('valenceScore')});$('arousalScore').value='';$('valenceScore').value='';$('selfNote').value='';$('labelStatus').textContent=r.training_sample_saved?`已保存「${r.label}」、评分及文字，并关联合格训练窗口。`:`已保存「${r.label}」、评分及文字。此次未关联训练窗口：${r.training_reason}`;}catch(e){$('labelStatus').textContent='保存失败，输入已保留：'+e.message;}finally{labelSaving=false;$('saveLabel').disabled=false;}};
 function bubble(text,role){const element=document.createElement('div');element.className='bubble '+role;element.textContent=text;$('messages').appendChild(element);$('messages').scrollTop=$('messages').scrollHeight;}
 $('chatForm').onsubmit=async event=>{event.preventDefault();const message=$('message').value.trim();if(!message)return;bubble(message,'user');$('message').value='';$('sendMessage').disabled=true;$('chatStatus').textContent='正在回应…';try{const r=await api('chat/message',{user_id:uid(),message});bubble(r.response,'assistant');$('chatStatus').textContent='以你的表达为准，生理结果仅在可靠时用于调整陪伴。';}catch(e){$('chatStatus').textContent='发送失败：'+e.message;}finally{$('sendMessage').disabled=false;}};
 async function poll(schedule=true){const user=uid();try{const state=await api('emotion/state?user_id='+encodeURIComponent(user));if(uid()!==user)return;showState(state);$('serverStatus').textContent='后端已连接';if(!device?.gatt.connected){$('connectionStatus').textContent=state.layer&&state.layer!=='stale'?'电脑网关已接入':'未连接设备';}else if(lastPacket&&Date.now()-lastPacket>5000){$('connectionStatus').textContent='BLE 数据已停，请重新连接';}}catch{$('serverStatus').textContent='后端离线';showState(null);}finally{if(schedule)setTimeout(poll,1000);}}

@@ -86,3 +86,25 @@ class LabelStore:
             staged.write_text(''.join(json.dumps(row, ensure_ascii=False, allow_nan=False)+'\n' for row in keep), encoding='utf-8')
             staged.replace(self.path)
             return len(rows) - len(keep)
+
+
+class SelfReportStore(LabelStore):
+    """Human observations remain valid even without a qualified sensor window."""
+    def __init__(self, path=None):
+        super().__init__(path or config.DATA_DIR / 'experiment_self_reports.jsonl')
+
+    def record(self, user_id, label, note='', arousal_score=None, valence_score=None):
+        if label not in CLASSES:
+            raise ValueError('请选择已定义的五类自评标签')
+        for score in (arousal_score, valence_score):
+            if score is not None and (type(score) is not int or not 1 <= score <= 9):
+                raise ValueError('评分必须为1~9的整数，或留空')
+        row = {'subject_id': user_id, 'timestamp': time.time(), 'label': label,
+               'note': str(note)[:1000], 'label_source': 'independent_self_report',
+               'arousal_1_9': arousal_score, 'valence_1_9': valence_score,
+               'scope': 'preceding_60_second_window', 'record_kind': 'subjective_only'}
+        with self.lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open('a', encoding='utf-8') as out:
+                out.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + '\n')
+        return row

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from hrv_companion_agent import config
 from hrv_companion_agent.backend.main import app
 from hrv_companion_agent.backend import routes
-from hrv_companion_agent.core.label_store import LabelStore
+from hrv_companion_agent.core.label_store import LabelStore, SelfReportStore
 from test_multimodal_pipeline import packet
 
 
@@ -16,10 +16,13 @@ class TestWebContract(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.old=config.MEMORY_DB_PATH
         config.MEMORY_DB_PATH=Path(self.temp.name)/'memory.db'
         routes._labels=LabelStore(Path(self.temp.name)/'labels.jsonl')
+        self.old_reports=routes._experiment_reports
+        routes._experiment_reports=SelfReportStore(Path(self.temp.name)/'reports.jsonl')
         self.client=TestClient(app)
     def tearDown(self):
         for system in routes._systems.values():system.close()
-        routes._systems.clear();self.client.close();config.MEMORY_DB_PATH=self.old;self.temp.cleanup()
+        routes._systems.clear();self.client.close();config.MEMORY_DB_PATH=self.old
+        routes._experiment_reports=self.old_reports;self.temp.cleanup()
     def post(self,raw):
         return self.client.post('/api/sensor/raw',json={'user_id':'api-test','packet':raw})
 
@@ -28,6 +31,25 @@ class TestWebContract(unittest.TestCase):
         self.assertIn('连接蓝牙设备',self.client.get('/').text)
         for p in ('app.js','style.css','ble_frames.js'):
             self.assertEqual(self.client.get('/static/'+p).status_code,200)
+
+    def test_subjective_report_without_qualified_sensor_window(self):
+        payload={'user_id':'report-test','label':'疲劳','note':'测试文字',
+                 'arousal_score':2,'valence_score':4}
+        response=self.client.post('/api/dataset/self-report',json=payload)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertTrue(response.json()['saved'])
+        self.assertFalse(response.json()['training_sample_saved'])
+        self.assertEqual(routes._labels.export('report-test'),[])
+        rows=routes._experiment_reports.export('report-test')
+        self.assertEqual(rows[0]['note'],'测试文字')
+        self.assertEqual(rows[0]['arousal_1_9'],2)
+        self.assertEqual(rows[0]['record_kind'],'subjective_only')
+        self.assertEqual(routes._experiment_reports.export('another-user'),[])
+        self.assertEqual(routes._experiment_reports.purge('report-test'),1)
+        self.assertEqual(routes._experiment_reports.export('report-test'),[])
+        for invalid in ('未知类别',):
+            self.assertEqual(self.client.post('/api/dataset/self-report',json={**payload,'label':invalid}).status_code,422)
+        self.assertEqual(routes._experiment_reports.export('report-test'),[])
 
     def test_quality_model_abstention_and_duplicate_contract(self):
         for i in range(1,66):r=self.post(packet(i))
