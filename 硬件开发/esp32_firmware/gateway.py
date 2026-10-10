@@ -86,7 +86,10 @@ async def run_ble(args):
                     record_received(args, packet)
                     queue.put(packet)
             try:
-                async with BleakClient(args.address, disconnected_callback=lambda _:disconnected.set()) as client:
+                # RAM diagnostics/reset can change the GATT database. Request
+                # fresh Windows service discovery instead of stale cached handles.
+                async with BleakClient(args.address, winrt={'use_cached_services': False},
+                        disconnected_callback=lambda _:disconnected.set()) as client:
                     await client.start_notify(DATA_UUID, notified)
                     print('BLE connected; receiving schema v2', flush=True)
                     while not disconnected.is_set():
