@@ -42,10 +42,19 @@ def _load_dotenv_files():
     for p in candidates:
         if p.exists() and str(p.resolve()) not in seen:
             seen.add(str(p.resolve()))
-            load_dotenv(p, override=False)
+            load_dotenv(p, override=False, encoding="utf-8-sig")
 
 
 _load_dotenv_files()
+
+# Browser origins contain no page path. Keep the published experiment site
+# explicit rather than granting arbitrary websites access to the local API.
+WEB_ALLOWED_ORIGINS = ["http://127.0.0.1:8000", "http://localhost:8000"]
+WEB_ALLOWED_ORIGINS += [
+    origin.strip().rstrip("/")
+    for origin in _env("WEB_ALLOWED_ORIGINS", "https://doc-b-yang.github.io").split(",")
+    if origin.strip()
+]
 
 # Load these AFTER dotenv, just like the other runtime options.
 MULTIMODAL_MODEL_ENABLED = os.getenv('MULTIMODAL_MODEL_ENABLED', '0').lower() in ('1', 'true', 'yes')

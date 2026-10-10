@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .routes import router  # noqa: E402
+from .. import config  # noqa: E402
 
 app = FastAPI(
     title="主动式情感陪伴系统 API",
@@ -33,7 +34,7 @@ app = FastAPI(
 # CORS: 允许 Flutter APP / Web 前端跨域访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://127.0.0.1:8000','http://localhost:8000'] + [origin.strip() for origin in os.getenv('WEB_ALLOWED_ORIGINS', '').split(',') if origin.strip()],
+    allow_origins=config.WEB_ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
