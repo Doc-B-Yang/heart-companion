@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 WEB = Path(__file__).resolve().parents[1] / 'backend' / 'web'
-ASSETS = ('app.js', 'style.css', 'refinements.css', 'ble_frames.js', 'waveforms.js')
+ASSETS = ('app.js', 'style.css', 'refinements.css', 'ble_frames.js', 'ble_signals.js', 'waveforms.js')
 
 def build(destination):
     destination = Path(destination)
