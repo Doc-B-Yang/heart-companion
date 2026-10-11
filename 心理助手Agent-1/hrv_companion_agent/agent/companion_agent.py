@@ -371,6 +371,10 @@ class CompanionAgent(_HelloSimpleAgent):
         同样判定为"低焦虑"，强度 0.2 与 0.9 的说话方式不该一样。
         """
         parts = [self.system_prompt]
+        provider = getattr(self, "affect_context_provider", None)
+        if provider:
+            from ..core.affect_context import prompt_context
+            parts.append(prompt_context(provider()))
         state = self._current_state or {}
         if state.get("emotion"):
             affect = state.get("affect") or {}

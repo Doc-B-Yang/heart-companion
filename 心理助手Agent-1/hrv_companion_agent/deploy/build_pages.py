@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 WEB = Path(__file__).resolve().parents[1] / 'backend' / 'web'
-ASSETS = ('app.js', 'style.css', 'refinements.css', 'ble_frames.js', 'ble_signals.js', 'waveforms.js')
+ASSETS = ('app.js', 'style.css', 'refinements.css', 'ble_frames.js', 'ble_signals.js', 'waveforms.js', 'speech_input.js', 'affect_view.js')
 
 def build(destination):
     destination = Path(destination)

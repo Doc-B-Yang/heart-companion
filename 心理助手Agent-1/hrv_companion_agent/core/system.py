@@ -67,6 +67,7 @@ from ..agent.tts_service import synthesize_sync
 from ..algorithms import (EmotionDynamics, EmotionRecognizer, HRVExtractor,
                           PADRegressor, TriggerEngine, estimate_pad)
 from .llm_client import CompanionLLM
+from .affect_context import AffectContext, infer_language_valence
 from .sensor_pipeline import SensorPipeline, finite
 from .sensor_calibration import SensorCalibration
 from ..algorithms.multimodal_emotion import MultimodalEmotionRecognizer
@@ -121,6 +122,8 @@ class HeartCompanionSystem:
         self.agent = CompanionAgent(user_id=self.user_id, llm=self.llm,
                                     memory=self.memory,
                                     trigger_engine=self.trigger)
+        self.subjective_affect = AffectContext()
+        self.agent.affect_context_provider = self.get_affect_context
 
         # ---------------- 运行状态 ----------------
         self._state: Optional[Dict] = None
@@ -577,9 +580,30 @@ class HeartCompanionSystem:
     # ==================================================================
     # 用户对话
     # ==================================================================
-    def chat(self, message: str) -> Dict:
+    def get_affect_context(self) -> Dict:
+        return self.subjective_affect.snapshot()
+
+    def record_affect_report(self, valence_score=None, arousal_score=None) -> Dict:
+        return self.subjective_affect.record_report(valence_score, arousal_score)
+
+    def analyze_valence(self, text: str, input_source: str = "text") -> Dict:
+        if input_source not in ("text", "speech_transcript"):
+            raise ValueError("未知输入来源")
+        if not isinstance(text, str) or len(text) > 5000:
+            raise ValueError("表达过长或格式无效")
+        generation = self.subjective_affect.begin_language()
+        # Crisis response must remain immediate; do not delay it for an extra LLM call.
+        if self.agent._crisis_text(text):  # noqa: SLF001
+            estimate = {"value": None, "confidence": None, "status": "unknown",
+                        "input_source": input_source, "reason": "优先提供安全支持，未推测效价"}
+        else:
+            estimate = infer_language_valence(self.llm, text, input_source)
+        return self.subjective_affect.finish_language(generation, estimate)
+
+    def chat(self, message: str, input_source: str = "text") -> Dict:
         """用户主动对话（带当前情绪上下文 + 参数调制 + 记忆检索）"""
         self.get_state()
+        self.analyze_valence(message, input_source)
         self._last_interaction_time = time.time()
         fta_id = self._capture_fta(message)
         reply = self._generate(lambda: self.agent.run_with_emotion(message,
@@ -594,11 +618,13 @@ class HeartCompanionSystem:
                 "tts_audio": audio,
                 "llm_backend": self.llm.backend,
                 "llm_params": self.llm.last_params,
+                "affect_context": self.get_affect_context(),
                 "fta_id": fta_id}
 
-    def stream_chat(self, message: str):
+    def stream_chat(self, message: str, input_source: str = "text"):
         """流式对话生成器（WebSocket/CLI 用）"""
         self.get_state()
+        self.analyze_valence(message, input_source)
         self._last_interaction_time = time.time()
         state = self._state or {}
         if self.agent._crisis_text(message):  # noqa: SLF001
@@ -880,6 +906,7 @@ class HeartCompanionSystem:
 
     def purge_data(self, keep_profile: bool = True) -> Dict:
         """清除用户记忆数据（被遗忘权）"""
+        self.subjective_affect.clear()
         return self.memory.purge_user_data(keep_profile=keep_profile)
 
     def _emotion_result_view(self):

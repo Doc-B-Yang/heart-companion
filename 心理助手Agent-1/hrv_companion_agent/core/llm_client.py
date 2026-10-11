@@ -161,6 +161,16 @@ class CompanionLLM:
         return ("在线", detail + "（模型返回为空，请检查配置）")
 
     # ------------------------------------------------------------ 推理
+    def invoke_valence(self, messages: List[dict]) -> str:
+        """Bounded structured inference, no chat overrides/retries/offline fallback."""
+        if self._backend != "openai":
+            raise RuntimeError("structured inference unavailable")
+        client = self._client.with_options(timeout=12.0, max_retries=0)
+        response = client.chat.completions.create(
+            model=self.model, messages=messages, temperature=0, max_tokens=180,
+            stream=False)
+        return response.choices[0].message.content or ""
+
     def _raw_chat(self, messages: List[dict], stream: bool = False):
         """真正调用 LLM 后端，失败时抛出异常（供健康检查/纠错使用）
 

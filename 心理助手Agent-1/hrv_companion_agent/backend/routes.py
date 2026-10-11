@@ -9,9 +9,9 @@ v2 相对 v1 的三处结构性变化（都源于算法层与工具层的能力�
 1. **状态接口承载完整感知链**。v1 的 ``/emotion/state`` 只回离散情绪 + 一张
    按标签查表算出来的 detail 视图；v2 增加 PAD 三维、情感动力学快照、
    信号质量报告，且 detail 视图优先由 PAD 连续值换算（情绪内才有区分度）。
-2. **新增"校准类"端点**。``/self-report`` 把用户主观评分落库并回传主客观
-   对照 —— 这是让「情绪识别准确率 > 85%」这个指标可被**真值**验证的唯一途径
-   （此前只有客观判定，没有真值，指标无法举证）。
+2. **主观信息与传感器预测分开**。``/dataset/self-report`` 保存独立实验自评；
+   ``/emotion/valence`` 提供未经验证的语言效价推测。``affect_context`` 标明来源、
+   回顾范围及有效期，不改写硬件 ``validated`` / ``pad``，不把 AI 推测作为训练真值。
 3. **新增"能力查询类"端点**。技能库（22 项循证技术）、分层转介、
    呼吸引导脚本由后端统一给出，避免 APP / 语音端各写一份规则而互相漂移。
 
@@ -26,10 +26,11 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 from ..core.label_store import LabelStore, SelfReportStore
 
 from hrv_companion_agent import config
@@ -106,13 +107,16 @@ def experiment_self_report(data: LabelRequest):
                                    data.arousal_score, data.valence_score)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    system = get_system(data.user_id)
+    affect_context = system.record_affect_report(data.valence_score, data.arousal_score)
     try:
-        linked = _labels.append(get_system(data.user_id), data.label, data.note,
+        linked = _labels.append(system, data.label, data.note,
                                 data.arousal_score, data.valence_score)
     except ValueError as exc:
         return {'saved': True, 'label': data.label, 'training_sample_saved': False,
-                'training_reason': str(exc), 'next_label_after_sec': 0}
-    return {**linked, 'training_sample_saved': True}
+                'training_reason': str(exc), 'next_label_after_sec': 0,
+                'affect_context': affect_context}
+    return {**linked, 'training_sample_saved': True, 'affect_context': affect_context}
 
 
 def get_system(user_id: str) -> HeartCompanionSystem:
@@ -139,9 +143,16 @@ class SensorData(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    user_id: str
-    message: str
+    user_id: str = Field(default='user001', min_length=1, max_length=64)
+    message: str = Field(min_length=1, max_length=5000)
+    input_source: Literal['text', 'speech_transcript'] = 'text'
     emotion_state: Optional[dict] = None
+
+
+class ValenceRequest(BaseModel):
+    user_id: str = Field(default='user001', min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=5000)
+    input_source: Literal['text', 'speech_transcript'] = 'text'
 
 
 class TTSRequest(BaseModel):
@@ -164,7 +175,7 @@ class ManualEmotionRequest(BaseModel):
 
 
 class SelfReportRequest(BaseModel):
-    """用户主观自评 —— 训练标签与验收真值的唯一来源。
+    """旧版焦虑自评工具；独立1–9效价/唤醒评分使用 /dataset/self-report。
 
     ``score`` 支持 0~10（自动按百分制 ×10）或 0~100 两种口径，
     由 ``agent/tools/self_report_tool`` 统一归一，此处不重复校验，
@@ -265,8 +276,17 @@ def emotion_state(user_id: str):
     state = system.get_state()
     if not state:
         return {"user_id": user_id, "emotion": None,
-                "detail": _detail_view(None), "message": "暂无传感器数据"}
-    return {"user_id": user_id, **_public_state(state)}
+                "detail": _detail_view(None), "message": "暂无传感器数据",
+                "affect_context": system.get_affect_context()}
+    return {"user_id": user_id, **_public_state(state),
+            "affect_context": system.get_affect_context()}
+
+
+@router.post('/emotion/valence')
+def language_valence(req: ValenceRequest):
+    """Current-expression estimate; never creates an independent training label."""
+    return {'user_id': req.user_id,
+            'affect_context': get_system(req.user_id).analyze_valence(req.text, req.input_source)}
 
 
 @router.get("/emotion/quality")
@@ -321,15 +341,24 @@ def chat_message(req: ChatRequest):
     if req.emotion_state:
         base = system.get_state() or {}
         system.agent.set_state({**base, **(req.emotion_state or {})})
-    result = system.chat(req.message)
+    result = system.chat(req.message, input_source=req.input_source)
     return {
         "response": result["response"],
         "emotion_adapted": result["emotion_adapted"],
         "state": _public_state(result["state"]),
         "llm_params": result.get("llm_params"),
+        "affect_context": result.get("affect_context"),
         "fta_id": result.get("fta_id"),
         "tts_audio_url": None,  # 由 /api/tts/audio/{file} 提供
     }
+
+
+_CHAT_STREAM_DONE = object()
+
+
+def _next_chat_chunk(stream):
+    # StopIteration cannot cross an asyncio Future; next() converts it to a sentinel.
+    return next(stream, _CHAT_STREAM_DONE)
 
 
 @router.websocket("/chat/stream")
@@ -339,14 +368,31 @@ async def chat_stream(ws: WebSocket):
     user_id = "user001"
     try:
         while True:
-            msg = await ws.receive_json()
-            user_id = msg.get("user_id", user_id)
-            system = get_system(user_id)
+            try:
+                msg = await ws.receive_json()
+                if isinstance(msg, dict):
+                    msg = {"user_id": user_id, **msg}
+                req = ChatRequest.model_validate(msg)
+            except (ValidationError, ValueError):
+                await ws.send_json({"type": "error", "content": "消息格式无效；请检查文字、参与者标识及输入来源。"})
+                continue
+            user_id = req.user_id
+            system = await run_in_threadpool(get_system, user_id)
+            state = await run_in_threadpool(system.get_state)
             await ws.send_json({"type": "state",
-                                "state": _public_state(system.get_state())})
-            for chunk in system.stream_chat(msg.get("message", "")):
-                await ws.send_json({"type": "chunk", "content": chunk})
-            await ws.send_json({"type": "done"})
+                                "state": _public_state(state)})
+            stream = system.stream_chat(req.message, input_source=req.input_source)
+            try:
+                while True:
+                    # The first next() includes language inference; every resume may
+                    # block on the LLM or memory writes, so all run off the ASGI loop.
+                    chunk = await run_in_threadpool(_next_chat_chunk, stream)
+                    if chunk is _CHAT_STREAM_DONE:
+                        break
+                    await ws.send_json({"type": "chunk", "content": chunk})
+            finally:
+                await run_in_threadpool(stream.close)
+            await ws.send_json({"type": "done", "affect_context": system.get_affect_context()})
     except WebSocketDisconnect:
         pass
     except Exception as e:  # noqa: BLE001
@@ -381,8 +427,7 @@ def feedback(req: FeedbackRequest):
 def self_report(req: SelfReportRequest):
     """提交主观自评（v2）
 
-    这是"情绪识别准确率 > 85%"这一指标**唯一**的可验证真值来源：
-    没有用户自评，所有准确率都只是在拿算法比算法。
+    这是旧版焦虑分数与生理估计对照工具，不等于独立效价标签或准确率验证。
     """
     if not config.SELF_REPORT_ENABLED:
         raise HTTPException(status_code=503, detail="主观自评未启用")
