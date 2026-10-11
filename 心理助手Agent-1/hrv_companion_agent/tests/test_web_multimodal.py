@@ -12,6 +12,20 @@ from test_multimodal_pipeline import packet
 
 
 class TestWebContract(unittest.TestCase):
+    def test_private_network_preflight_only_for_allowed_origins(self):
+        headers={'Origin':'https://doc-b-yang.github.io',
+                 'Access-Control-Request-Method':'POST',
+                 'Access-Control-Request-Headers':'content-type',
+                 'Access-Control-Request-Private-Network':'true'}
+        response=self.client.options('/api/dataset/self-report',headers=headers)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.headers.get('access-control-allow-private-network'),'true')
+        self.assertEqual(response.headers.get('access-control-allow-origin'),headers['Origin'])
+        headers['Origin']='https://untrusted.example'
+        response=self.client.options('/api/dataset/self-report',headers=headers)
+        self.assertEqual(response.status_code,400)
+        self.assertNotIn('access-control-allow-origin',response.headers)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.old=config.MEMORY_DB_PATH
         config.MEMORY_DB_PATH=Path(self.temp.name)/'memory.db'

@@ -98,6 +98,8 @@ def main():
     errors = {'ppg': 0, 'imu': 0, 'ads': 0, 'fifo': 0, 'clock': 0}
     totals = dict(errors)
     eda = []
+    ppg_display = []
+    display_due = 0
     healthy = {'ppg': False, 'imu': False, 'ads': False}
     expected = config.MAX30102_SAMPLE_RATE / config.MAX30102_FIFO_AVG
     period_ms = 1000.0 / expected
@@ -161,6 +163,13 @@ def main():
                         sample_t = uptime - len(batch) * period_ms
                     for red, ir in batch:
                         sample_t += period_ms
+                        # Bounded 25 Hz display samples; HRV still uses every
+                        # sensor sample. Never reconstruct a waveform from HR.
+                        if sample_t >= display_due:
+                            ppg_display.append([hrv.segment_id, int(sample_t), red, ir, int(blocked)])
+                            if len(ppg_display) > 28:
+                                ppg_display.pop(0)
+                            display_due = sample_t + 40
                         if ir >= 262100 or ir <= 100:
                             if not blocked:
                                 hrv.invalidate()
@@ -225,6 +234,8 @@ def main():
                 'motion_devs': [round(x, 3) for x in devs],
                 'ads': healthy['ads'] and uptime - last_adc < 150,
                 'eda_samples': eda, 'eda_voltage': eda[-1][1] if eda else None,
+                'ppg_samples': ppg_display,
+                'ppg_display_hz': 25,
                 'sample_rate': round(samples * 1000.0 / duration_ms, 3),
                 'expected_rate': expected, 'samples': samples,
                 'report_work_ms': report_work_ms,
@@ -257,6 +268,7 @@ def main():
                 errors['ppg'] += 1
             led.value(1 if continuity and m['nn'] else 0)
             samples, eda = 0, []
+            ppg_display = []
             if encoded:
                 errors = {k: 0 for k in errors}
             del m, out, payload

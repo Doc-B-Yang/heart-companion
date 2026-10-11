@@ -8,8 +8,8 @@
 <div class="section-title"><h2>实时波形</h2><span class="badge" id="waveStatus" role="status">等待真实采集</span></div>
 <div class="wave-grid"><article><h3>PPG · 红外去直流 <small>ADC 计数 / 最近 8 秒</small></h3><canvas id="ppgWave" aria-label="PPG 红外波形"></canvas></article><article><h3>GSR · 皮肤电 <small>电压 V / 最近 30 秒</small></h3><canvas id="gsrWave" aria-label="GSR 电压波形"></canvas></article></div>
 <div class="wave-meta"><span id="waveCount">尚无采样</span><span id="waveMotion">运动状态等待数据</span><button class="secondary" id="pauseWave">暂停画面</button><button class="secondary" id="downloadWave" disabled>下载原始 CSV</button></div>
-<p class="hint">BLE 接收后直接显示 GSR，并可下载最近最多 600 包数据，质量不合格也会保留。当前 BLE 固件发送 PPG 指标和心搏间期；原始 PPG 曲线由 USB 波形服务提供。采集成功与可用于情绪分析是两个状态。</p>
-<details class="connection-panel"><summary>连接电脑端服务</summary><p class="hint">网站随时可打开。实时波形需要这台电脑运行波形服务；分析和陪伴需要运行后端。浏览器询问本地网络访问时，请自行决定是否允许。</p><label class="field">分析后端 <input id="apiBase" placeholder="http://127.0.0.1:8000" type="url"></label><label class="field">波形服务 <input id="waveBase" value="http://127.0.0.1:8011" type="url"></label><button id="saveConnection" class="secondary">保存并连接</button><p class="hint" id="connectionHint" role="status">仅在此浏览器保存地址；不向 GitHub 上传信号或聊天。</p></details>
+<p class="hint">新版固件通过 BLE 或 USB 同时显示 PPG 与 GSR，质量不合格的实测信号也会保留。PPG 波形为 25 Hz 显示采样；心搏分析仍使用完整采样。采集成功与可用于情绪分析是两个状态。</p>
+<details class="connection-panel"><summary>连接电脑端服务</summary><p class="hint">网站随时可打开。BLE 波形不需要本机波形服务；USB 波形需要本机波形服务，分析和陪伴需要运行后端。浏览器询问本地网络访问时，请自行决定是否允许。</p><label class="field">分析后端 <input id="apiBase" placeholder="http://127.0.0.1:8000" type="url"></label><label class="field">波形服务 <input id="waveBase" value="http://127.0.0.1:8011" type="url"></label><button id="saveConnection" class="secondary">保存并连接</button><p class="hint" id="connectionHint" role="status">仅在此浏览器保存地址；不向 GitHub 上传信号或聊天。</p></details>
 </section>
 <div class="layout"><section class="card sensing">
 <div class="section-title"><h2>当下状态</h2><span id="connectionStatus" class="badge">未连接设备</span></div>

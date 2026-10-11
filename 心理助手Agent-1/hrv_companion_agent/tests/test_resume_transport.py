@@ -116,6 +116,22 @@ class TestDeploymentRecovery(unittest.TestCase):
 
 
 class TestFixedReplUART(unittest.TestCase):
+    def test_ble_waveform_samples_keep_clock_segments_and_fit_mtu23_budget(self):
+        from ble_transport import encode_packet, frames, PACKET_FIELDS
+        from ble_receiver import FrameAssembler
+        packet={key:None for key in PACKET_FIELDS}
+        packet.update(schema=2,device_id='20500d165aa6',boot_id='0123456789abcdef',seq=1,
+                      device_ms=100000,eda_samples=[[99000+i*50,1.23456] for i in range(20)],
+                      ppg_samples=[[3,99000+i*40,59000+i,62000+i,0] for i in range(25)],
+                      errors={'ppg':0,'imu':0,'ads':0,'fifo':0,'clock':0})
+        chunks=frames(encode_packet(packet),1)
+        # At 8 ms per MTU23 fragment, a display report must fit within 1 s.
+        self.assertLess(len(chunks)*8,1000)
+        assembler=FrameAssembler();result=None
+        for frame in chunks:result=assembler.add(frame)
+        self.assertEqual(result['eda_samples'],packet['eda_samples'])
+        self.assertEqual(result['ppg_samples'],[[p[0],p[1],p[3],p[3],0] for p in packet['ppg_samples']])
+
     def test_compact_ble_preserves_all_inference_fields_and_sample_times(self):
         from ble_transport import encode_packet, frames, PACKET_FIELDS
         from ble_receiver import FrameAssembler

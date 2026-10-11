@@ -56,11 +56,14 @@ class FrameAssembler:
             result = json.loads(full.decode('utf-8'))
             if isinstance(result, dict) and result.get('hc') == 1:
                 values = result.get('v')
-                if not isinstance(values, list) or len(values) != len(PACKET_FIELDS):
+                if not isinstance(values, list) or len(values) not in (22, 23):
                     raise ValueError('Invalid HC compact packet')
                 result = dict(zip(PACKET_FIELDS, values))
                 result['eda_samples'] = [[t + result['device_ms'], voltage]
                                           for t, voltage in result['eda_samples']]
+                if len(values) == 23:
+                    result['ppg_samples'] = [[segment, t + result['device_ms'], ir, ir, 0]
+                        for t, ir, segment in values[22]]
             return result if isinstance(result, dict) else None
         except (ValueError, UnicodeError, TypeError):
             self.dropped += 1

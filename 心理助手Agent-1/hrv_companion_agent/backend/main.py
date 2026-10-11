@@ -12,6 +12,7 @@
 
 import sys
 import os
+import inspect
 from pathlib import Path
 
 # 保证 hrv_companion_agent 包可导入（无论从何处启动）
@@ -38,9 +39,21 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    **({'allow_private_network': True}
+       if 'allow_private_network' in inspect.signature(CORSMiddleware).parameters else {}),
 )
 
 app.include_router(router, prefix="/api")
+
+
+@app.middleware('http')
+async def local_network_preflight(request, call_next):
+    response = await call_next(request)
+    if (request.method == 'OPTIONS'
+            and request.headers.get('origin') in config.WEB_ALLOWED_ORIGINS
+            and request.headers.get('access-control-request-private-network') == 'true'):
+        response.headers['Access-Control-Allow-Private-Network'] = 'true'
+    return response
 WEB_DIR = Path(__file__).resolve().parent / 'web'
 app.mount('/static',StaticFiles(directory=WEB_DIR),name='static')
 

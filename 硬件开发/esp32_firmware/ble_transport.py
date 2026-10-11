@@ -19,6 +19,10 @@ def encode_packet(packet):
     values = [packet.get(key) for key in PACKET_FIELDS]
     values[18] = [[t - packet['device_ms'], voltage]
                   for t, voltage in packet['eda_samples']]
+    # Compact display-only IR; segment breaks remain explicit.
+    if 'ppg_samples' in packet:
+        values.append([[p[1] - packet['device_ms'], p[3], p[0]]
+                      for p in packet['ppg_samples']])
     return json.dumps({'hc': 1, 'v': values}, separators=(',', ':'))
 
 SERVICE_UUID = '8e7c0001-7f8a-4a2c-9f81-4b9e764d0001'
